@@ -10,6 +10,9 @@ Run under torchrun for multi-GPU:
 import argparse
 import os
 
+# forked dataloader workers deadlock with the rust tokenizer threadpool
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import torch
 from datasets import load_dataset
 from pylate import losses, models, utils
@@ -30,6 +33,7 @@ def main():
     ap.add_argument("--embedding-size", type=int, default=128)
     ap.add_argument("--doc-length", type=int, default=300)
     ap.add_argument("--max-steps", type=int, default=-1, help="override for smoke runs")
+    ap.add_argument("--num-workers", type=int, default=4)
     args = ap.parse_args()
 
     model = models.ColBERT(
@@ -57,8 +61,8 @@ def main():
         bf16=True,
         save_strategy="epoch",
         save_total_limit=None,
-        logging_steps=100,
-        dataloader_num_workers=8,
+        logging_steps=10,
+        dataloader_num_workers=args.num_workers,
         report_to=[],
         seed=42,
     )
