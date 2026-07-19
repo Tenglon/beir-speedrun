@@ -1,7 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=beir-ret
-#SBATCH --output=/gpfs/scratch/ehpc821/uoa994647/beir_speedrun/logs/ret_%A_%a.out
-#SBATCH --error=/gpfs/scratch/ehpc821/uoa994647/beir_speedrun/logs/ret_%A_%a.err
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
@@ -10,8 +8,9 @@
 #SBATCH --partition=acc
 #SBATCH --account=ehpc821
 #SBATCH --qos=acc_ehpc
+# Submit via submit_retrieve.sh — the job inherits BEIR_ROOT/CODE_ROOT/... from it.
 set -euo pipefail
-source /gpfs/scratch/ehpc821/uoa994647/beir_speedrun/code/bsc/env.sh
+source "$CODE_ROOT/bsc/env.sh"
 
 line=$(sed -n "$((SLURM_ARRAY_TASK_ID + 1))p" "$EMB_ROOT/retrieve_targets.tsv")
 DS=$(echo "$line" | cut -f1)

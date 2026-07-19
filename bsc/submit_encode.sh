@@ -7,4 +7,6 @@ source "$(dirname "$0")/env.sh"
 N=$("$VENV/bin/python" -c "import json;print(len(json.load(open('$EMB_ROOT/manifest.json'))['tasks']))")
 SPEC="${1:-0-$((N - 1))}"
 echo "manifest has $N shard tasks; submitting array=$SPEC%${THROTTLE:-100}"
-sbatch --array="$SPEC%${THROTTLE:-100}" ${SBATCH_EXTRA:-} "$CODE_ROOT/bsc/encode_array.sbatch"
+sbatch --array="$SPEC%${THROTTLE:-100}" \
+  --output="$LOGS/enc_%A_%a.out" --error="$LOGS/enc_%A_%a.err" \
+  ${SBATCH_EXTRA:-} "$CODE_ROOT/bsc/encode_array.sbatch"
