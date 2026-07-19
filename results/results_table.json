@@ -1,0 +1,323 @@
+{
+ "arguana": {
+  "dataset": "arguana",
+  "split": "test",
+  "num_queries": 1406,
+  "num_docs": 8674,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.23609,
+   "ndcg_cut_10": 0.2881,
+   "ndcg_cut_100": 0.35373,
+   "recall_100": 0.7845
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "climate-fever": {
+  "dataset": "climate-fever",
+  "split": "test",
+  "num_queries": 1535,
+  "num_docs": 5416593,
+  "num_shards": 11,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.08286,
+   "ndcg_cut_10": 0.06425,
+   "ndcg_cut_100": 0.11946,
+   "recall_100": 0.29692
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "dbpedia-entity": {
+  "dataset": "dbpedia-entity",
+  "split": "test",
+  "num_queries": 400,
+  "num_docs": 4635922,
+  "num_shards": 10,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.12594,
+   "ndcg_cut_10": 0.04146,
+   "ndcg_cut_100": 0.06491,
+   "recall_100": 0.10497
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "fever": {
+  "dataset": "fever",
+  "split": "test",
+  "num_queries": 6666,
+  "num_docs": 5416568,
+  "num_shards": 11,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.03053,
+   "ndcg_cut_10": 0.03633,
+   "ndcg_cut_100": 0.05593,
+   "recall_100": 0.15711
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "fiqa": {
+  "dataset": "fiqa",
+  "split": "test",
+  "num_queries": 648,
+  "num_docs": 57638,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.02577,
+   "ndcg_cut_10": 0.02219,
+   "ndcg_cut_100": 0.04171,
+   "recall_100": 0.11627
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "hotpotqa": {
+  "dataset": "hotpotqa",
+  "split": "test",
+  "num_queries": 7405,
+  "num_docs": 5233329,
+  "num_shards": 11,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.109,
+   "ndcg_cut_10": 0.08283,
+   "ndcg_cut_100": 0.11147,
+   "recall_100": 0.22275
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "msmarco": {
+  "dataset": "msmarco",
+  "split": "dev",
+  "num_queries": 6980,
+  "num_docs": 8841823,
+  "num_shards": 18,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.01525,
+   "ndcg_cut_10": 0.01914,
+   "ndcg_cut_100": 0.03346,
+   "recall_100": 0.10494
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "nfcorpus": {
+  "dataset": "nfcorpus",
+  "split": "test",
+  "num_queries": 323,
+  "num_docs": 3633,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.10951,
+   "ndcg_cut_10": 0.04933,
+   "ndcg_cut_100": 0.07021,
+   "recall_100": 0.10602
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "nq": {
+  "dataset": "nq",
+  "split": "test",
+  "num_queries": 3452,
+  "num_docs": 2681468,
+  "num_shards": 6,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.02194,
+   "ndcg_cut_10": 0.02602,
+   "ndcg_cut_100": 0.05061,
+   "recall_100": 0.16754
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "quora": {
+  "dataset": "quora",
+  "split": "test",
+  "num_queries": 10000,
+  "num_docs": 522931,
+  "num_shards": 2,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.60668,
+   "ndcg_cut_10": 0.61027,
+   "ndcg_cut_100": 0.64459,
+   "recall_100": 0.86129
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "scidocs": {
+  "dataset": "scidocs",
+  "split": "test",
+  "num_queries": 1000,
+  "num_docs": 25657,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.05569,
+   "ndcg_cut_10": 0.02921,
+   "ndcg_cut_100": 0.06451,
+   "recall_100": 0.14282
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "scifact": {
+  "dataset": "scifact",
+  "split": "test",
+  "num_queries": 300,
+  "num_docs": 5183,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.143,
+   "ndcg_cut_10": 0.16571,
+   "ndcg_cut_100": 0.21658,
+   "recall_100": 0.509
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "trec-covid": {
+  "dataset": "trec-covid",
+  "split": "test",
+  "num_queries": 50,
+  "num_docs": 171332,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.35822,
+   "ndcg_cut_10": 0.14983,
+   "ndcg_cut_100": 0.08317,
+   "recall_100": 0.01724
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "webis-touche2020": {
+  "dataset": "webis-touche2020",
+  "split": "test",
+  "num_queries": 49,
+  "num_docs": 382545,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.03611,
+   "ndcg_cut_10": 0.00902,
+   "ndcg_cut_100": 0.0216,
+   "recall_100": 0.0381
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "bert-base-uncased",
+   "pooling": "mean",
+   "similarity": "cosine",
+   "max_length": 256,
+   "zero_shot": true
+  }
+ },
+ "cqadupstack": {
+  "dataset": "cqadupstack",
+  "split": "test",
+  "num_queries": 13145,
+  "num_docs": 457199,
+  "metrics": {
+   "ndcg_cut_10": 0.055305,
+   "ndcg_cut_100": 0.07835416666666667,
+   "recall_100": 0.18957416666666668,
+   "mrr_10": 0.05414666666666667
+  },
+  "sub_datasets": 12
+ }
+}
