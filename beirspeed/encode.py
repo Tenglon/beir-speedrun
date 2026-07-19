@@ -62,6 +62,9 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     tok, model = load_model(args.model_dir, device)
+    print("attn_implementation=%s cudnn_sdp=%s" % (
+        getattr(model.config, "_attn_implementation", "?"),
+        torch.backends.cuda.cudnn_sdp_enabled() if device == "cuda" else "n/a"), flush=True)
 
     t0 = time.time()
     ids, texts = [], []

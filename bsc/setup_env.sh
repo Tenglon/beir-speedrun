@@ -1,20 +1,23 @@
 #!/bin/bash
-# One-time setup on the login node: venv over wote-h100's python (reuses its torch),
-# offline install of transformers + pytrec_eval from the staged wheelhouse,
-# unzip datasets, build the shard manifest.
+# One-time setup on the login node: python 3.12 venv (miniforge, absolute path so no
+# module system needed) with torch 2.11.0+cu126 installed offline from the staged
+# wheelhouse — cuDNN 9 SDPA gives FA3-class attention on H100 (driver 535 => cu12x
+# builds only, never cu13x). Then unzip datasets and build the shard manifest.
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 
-BASE_PY=/gpfs/scratch/ehpc821/uoa994647/conda_envs/wote-h100/bin/python
+BASE_PY=/apps/ACC/MINIFORGE/25.3.0-3/bin/python
 
 if [ ! -x "$VENV/bin/python" ]; then
-  "$BASE_PY" -m venv --system-site-packages "$VENV"
+  "$BASE_PY" -m venv "$VENV"
 fi
-"$VENV/bin/pip" install --no-index --find-links "$BEIR_ROOT/staging/wheelhouse" \
-  transformers pytrec-eval-terrier
+"$VENV/bin/pip" install --no-index --no-cache-dir --find-links "$BEIR_ROOT/staging/wheelhouse312" \
+  "torch==2.11.0+cu126" transformers pytrec-eval-terrier numpy
 "$VENV/bin/python" - <<'PY'
-import torch, transformers, pytrec_eval, numpy
-print("torch", torch.__version__, "| transformers", transformers.__version__,
+import numpy, pytrec_eval, torch, transformers
+print("torch", torch.__version__, "| cuda build", torch.version.cuda,
+      "| cudnn", torch.backends.cudnn.version(),
+      "| transformers", transformers.__version__,
       "| numpy", numpy.__version__, "| pytrec_eval ok")
 PY
 

@@ -22,9 +22,11 @@ Everything lives under `/gpfs/scratch/ehpc821/uoa994647/beir_speedrun`:
 `models/`, `venv/`, `embeddings/` (shards + manifest), `results/`, `logs/`.
 
 The cluster has **no internet on any node** (login, compute, transfer), so all
-assets are downloaded locally and rsync'd to `transfer1.bsc.es`. The venv is built
-with `--system-site-packages` over the existing `wote-h100` conda env to reuse its
-torch 2.5.1+cu124; only transformers + pytrec-eval wheels are installed on top.
+assets are downloaded locally and rsync'd to `transfer1.bsc.es`. The venv is
+python 3.12 (miniforge) with **torch 2.11.0+cu126** installed offline from
+`staging/wheelhouse312` — cuDNN 9 SDPA provides FA3-class fused attention on
+H100. GPU driver is 535 (CUDA 12.2), so only cu12x torch builds work (cu13x
+needs driver >= 580); cu126 runs via CUDA minor-version compatibility.
 
 ## Run order (login node)
 
