@@ -6,8 +6,6 @@
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 
-BASE_PY=/apps/ACC/MINIFORGE/25.3.0-3/bin/python
-
 if [ ! -x "$VENV/bin/python" ]; then
   "$BASE_PY" -m venv "$VENV"
 fi

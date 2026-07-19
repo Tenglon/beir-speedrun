@@ -20,4 +20,6 @@ PY
 
 N=$(wc -l < "$EMB_ROOT/retrieve_targets.tsv")
 echo "submitting retrieve array 0-$((N - 1))"
-sbatch --array="${1:-0-$((N - 1))}%${THROTTLE:-100}" ${SBATCH_EXTRA:-} "$CODE_ROOT/bsc/retrieve_array.sbatch"
+sbatch --array="${1:-0-$((N - 1))}%${THROTTLE:-100}" \
+  --output="$LOGS/ret_%A_%a.out" --error="$LOGS/ret_%A_%a.err" \
+  ${SBATCH_EXTRA:-} "$CODE_ROOT/bsc/retrieve_array.sbatch"

@@ -1,0 +1,7 @@
+# Installed offline on the cluster from the staged wheelhouse:
+#   pip install --no-index --find-links $BEIR_ROOT/staging/wheelhouse312 -r requirements.txt
+# (see local/download_assets.sh for how the wheelhouse is built)
+torch==2.11.0+cu126
+transformers==4.46.3
+pytrec-eval-terrier
+numpy
