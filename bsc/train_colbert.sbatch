@@ -12,6 +12,8 @@
 set -euo pipefail
 source "$CODE_ROOT/bsc/env.sh"
 export HF_DATASETS_OFFLINE=1
+# DDP replicas need ~1GB headroom over the single-GPU footprint
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 "$VENV/bin/torchrun" --nproc_per_node="${NPROC:-4}" "$CODE_ROOT/train/train_colbert.py" \
   --model-dir "$BEIR_ROOT/models/bert-base-uncased" \
