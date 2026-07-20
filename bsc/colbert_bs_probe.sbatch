@@ -14,16 +14,16 @@ set -uo pipefail
 source "$CODE_ROOT/bsc/env.sh"
 export HF_DATASETS_OFFLINE=1
 
-for cfg in "16 4" "32 4" "64 4" "128 4" "256 4" "32 0"; do
-  bs=${cfg% *}; nw=${cfg#* }
-  echo "=== probe bs=$bs nw=$nw ==="
-  rm -rf "$BEIR_ROOT/colbert/probe_bs${bs}_nw$nw"
+for cfg in "16 4 --no-math-sdp" "32 4 --no-math-sdp" "64 4 --no-math-sdp" "128 8 --no-math-sdp" "16 4 "; do
+  read -r bs nw flag <<< "$cfg"
+  echo "=== probe bs=$bs nw=$nw flag=${flag:-none} ==="
+  rm -rf "$BEIR_ROOT/colbert/probe_bs${bs}_nw${nw}${flag:+_nomath}"
   start=$(date +%s)
   timeout 900 "$VENV/bin/python" "$CODE_ROOT/train/train_colbert.py" \
     --model-dir "$BEIR_ROOT/models/bert-base-uncased" \
     --data-dir "$BEIR_ROOT/kd_dataset/ms-marco-en-bge-gemma" \
-    --out-dir "$BEIR_ROOT/colbert/probe_bs${bs}_nw$nw" \
-    --batch-size "$bs" --max-steps 20 --epochs 1 --num-workers "$nw" \
-    && echo "bs=$bs nw=$nw OK elapsed=$(( $(date +%s) - start ))s" \
-    || echo "bs=$bs nw=$nw FAILED rc=$? (OOM or 900s timeout)"
+    --out-dir "$BEIR_ROOT/colbert/probe_bs${bs}_nw${nw}${flag:+_nomath}" \
+    --batch-size "$bs" --max-steps 20 --epochs 1 --num-workers "$nw" $flag \
+    && echo "bs=$bs nw=$nw flag=${flag:-none} OK elapsed=$(( $(date +%s) - start ))s" \
+    || echo "bs=$bs nw=$nw flag=${flag:-none} FAILED rc=$? (OOM or 900s timeout)"
 done

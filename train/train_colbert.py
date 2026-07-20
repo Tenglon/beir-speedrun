@@ -34,7 +34,11 @@ def main():
     ap.add_argument("--doc-length", type=int, default=300)
     ap.add_argument("--max-steps", type=int, default=-1, help="override for smoke runs")
     ap.add_argument("--num-workers", type=int, default=4)
+    ap.add_argument("--no-math-sdp", action="store_true",
+                    help="forbid the math SDPA fallback (memory blowup); error instead")
     args = ap.parse_args()
+    if args.no_math_sdp:
+        torch.backends.cuda.enable_math_sdp(False)
 
     model = models.ColBERT(
         model_name_or_path=args.model_dir,
@@ -73,9 +77,20 @@ def main():
         loss=losses.Distillation(model=model),
         data_collator=utils.ColBERTCollator(model.tokenize),
     )
+    if int(os.environ.get("RANK", "0")) == 0:
+        batch = next(iter(trainer.get_train_dataloader()))
+        for k, v in batch.items():
+            if hasattr(v, "shape"):
+                print("batch %s %s" % (k, tuple(v.shape)), flush=True)
+
+    import time
+    t0 = time.time()
     trainer.train()
     if int(os.environ.get("RANK", "0")) == 0:
-        print("peak_mem_gb=%.1f" % (torch.cuda.max_memory_allocated() / 2**30))
+        dt = time.time() - t0
+        steps = trainer.state.global_step
+        print("steps=%d time=%.0fs %.2fs/step peak_mem_gb=%.1f" % (
+            steps, dt, dt / max(steps, 1), torch.cuda.max_memory_allocated() / 2**30))
         model.save_pretrained(os.path.join(args.out_dir, "final"))
 
 
