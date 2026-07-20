@@ -34,6 +34,7 @@ def main():
     ap.add_argument("--doc-length", type=int, default=300)
     ap.add_argument("--max-steps", type=int, default=-1, help="override for smoke runs")
     ap.add_argument("--num-workers", type=int, default=4)
+    ap.add_argument("--grad-accum", type=int, default=1)
     ap.add_argument("--no-math-sdp", action="store_true",
                     help="forbid the math SDPA fallback (memory blowup); error instead")
     args = ap.parse_args()
@@ -60,6 +61,7 @@ def main():
         num_train_epochs=args.epochs,
         max_steps=args.max_steps,
         per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.lr,
         warmup_ratio=0.05,
         bf16=True,
