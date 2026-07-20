@@ -35,6 +35,8 @@ def main():
     ap.add_argument("--max-steps", type=int, default=-1, help="override for smoke runs")
     ap.add_argument("--num-workers", type=int, default=4)
     ap.add_argument("--grad-accum", type=int, default=1)
+    ap.add_argument("--save-steps", type=int, default=0,
+                    help="checkpoint every N steps instead of once per epoch")
     ap.add_argument("--no-math-sdp", action="store_true",
                     help="forbid the math SDPA fallback (memory blowup); error instead")
     args = ap.parse_args()
@@ -65,7 +67,8 @@ def main():
         learning_rate=args.lr,
         warmup_ratio=0.05,
         bf16=True,
-        save_strategy="epoch",
+        save_strategy="steps" if args.save_steps else "epoch",
+        save_steps=args.save_steps or 500,
         save_total_limit=None,
         logging_steps=10,
         dataloader_num_workers=args.num_workers,
