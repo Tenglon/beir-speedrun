@@ -25,12 +25,17 @@ from sentence_transformers import (
     SentenceTransformerTrainingArguments,
 )
 
-from beirspeed.halo import HALOLift, lorentz_kd_scores
+from beirspeed.halo import HALOLift, cosine_kd_scores, lorentz_kd_scores
 
 
 class LorentzDistillation(losses.Distillation):
-    def __init__(self, model):
+    """KD loss over HALO geometry. score_mode="lorentz": pure negative Lorentz
+    distance. score_mode="hybrid" (HALO mainline): 0.5 * KL(cosine branch) +
+    0.5 * KL(lorentz branch), mirroring HALO's hybrid loss mixing."""
+
+    def __init__(self, model, score_mode="lorentz"):
         super().__init__(model=model, normalize_scores=False)
+        self.score_mode = score_mode
 
     def forward(self, sentence_features, labels):
         q_out = self.model(sentence_features[0])
@@ -43,12 +48,19 @@ class LorentzDistillation(losses.Distillation):
         documents_mask = masks[1].view(q.size(0), -1, *masks[1].shape[1:])
         queries_mask = None if inner.do_query_expansion else masks[0]
 
-        scores = lorentz_kd_scores(
-            q, docs, q_out["halo_curv"], q_out["halo_logit_scale"],
-            queries_mask=queries_mask, documents_mask=documents_mask)
-        return self.loss_function(
-            torch.nn.functional.log_softmax(scores, dim=-1),
-            torch.nn.functional.log_softmax(labels, dim=-1))
+        curv, scale = q_out["halo_curv"], q_out["halo_logit_scale"]
+        log_teacher = torch.nn.functional.log_softmax(labels, dim=-1)
+        lor = lorentz_kd_scores(q, docs, curv, scale,
+                                queries_mask=queries_mask, documents_mask=documents_mask)
+        lor_loss = self.loss_function(
+            torch.nn.functional.log_softmax(lor, dim=-1), log_teacher)
+        if self.score_mode == "lorentz":
+            return lor_loss
+        cos = cosine_kd_scores(q, docs, scale,
+                               queries_mask=queries_mask, documents_mask=documents_mask)
+        cos_loss = self.loss_function(
+            torch.nn.functional.log_softmax(cos, dim=-1), log_teacher)
+        return 0.5 * cos_loss + 0.5 * lor_loss
 
 
 def main():
@@ -60,6 +72,7 @@ def main():
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--lr", type=float, default=2e-5)
     ap.add_argument("--curv-init", type=float, default=0.1)
+    ap.add_argument("--score-mode", choices=["lorentz", "hybrid"], default="hybrid")
     ap.add_argument("--lora-r", type=int, default=32)
     ap.add_argument("--lora-alpha", type=int, default=64)
     ap.add_argument("--max-steps", type=int, default=-1)
@@ -74,7 +87,7 @@ def main():
         model[0].auto_model,
         LoraConfig(r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=0.05,
                    target_modules=["query", "key", "value", "dense"], bias="none"))
-    model.append(HALOLift(curv_init=args.curv_init))
+    model.append(HALOLift(curv_init=args.curv_init, score_mode=args.score_mode))
 
     rank0 = int(os.environ.get("RANK", "0")) == 0
     if rank0:
@@ -108,7 +121,7 @@ def main():
     )
     trainer = SentenceTransformerTrainer(
         model=model, args=targs, train_dataset=train,
-        loss=LorentzDistillation(model=model),
+        loss=LorentzDistillation(model=model, score_mode=args.score_mode),
         data_collator=utils.ColBERTCollator(model.tokenize))
 
     import time

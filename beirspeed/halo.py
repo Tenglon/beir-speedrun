@@ -21,10 +21,11 @@ def inv_softplus(y):
 
 
 class HALOLift(nn.Module):
-    def __init__(self, curv_init=0.1, logit_scale_init=2.6592):
+    def __init__(self, curv_init=0.1, logit_scale_init=2.6592, score_mode="lorentz"):
         super().__init__()
         self.curv_init = curv_init
         self.logit_scale_init = logit_scale_init
+        self.score_mode = score_mode  # "lorentz" | "hybrid" (HALO mainline: 0.5 cos + 0.5 -dist)
         self.curv_raw = nn.Parameter(torch.tensor(inv_softplus(curv_init), dtype=torch.float32))
         self.logit_scale = nn.Parameter(torch.tensor(float(logit_scale_init), dtype=torch.float32))
 
@@ -41,7 +42,8 @@ class HALOLift(nn.Module):
         return features
 
     def get_config_dict(self):
-        return {"curv_init": self.curv_init, "logit_scale_init": self.logit_scale_init}
+        return {"curv_init": self.curv_init, "logit_scale_init": self.logit_scale_init,
+                "score_mode": self.score_mode}
 
     def save(self, output_path, *args, **kwargs):
         os.makedirs(output_path, exist_ok=True)
@@ -94,14 +96,26 @@ def lorentz_pairwise_sim(q, d, curv, eps=1e-6):
     return -torch.acosh(torch.clamp(-curv * ip, min=1.0 + eps)) / torch.sqrt(curv)
 
 
-def lorentz_kd_scores(q, docs, curv, logit_scale, queries_mask=None, documents_mask=None):
-    """MaxSim over negative Lorentz distance, scaled by logit_scale.
-
-    q [Nq, Lq, D+1], docs [Nq, B, Ld, D+1] -> scores [Nq, B]."""
-    sim = lorentz_pairwise_sim(q.float().unsqueeze(1), docs.float(), curv)  # [Nq,B,Lq,Ld]
+def _maxsim_reduce(sim, logit_scale, queries_mask, documents_mask):
     if documents_mask is not None:
         sim = sim.masked_fill(~documents_mask.unsqueeze(2).bool(), float("-inf"))
     best = torch.nan_to_num(sim.max(dim=-1).values, neginf=0.0)  # [Nq,B,Lq]
     if queries_mask is not None:
         best = best * queries_mask.unsqueeze(1).float()
     return logit_scale * best.sum(dim=-1)
+
+
+def lorentz_kd_scores(q, docs, curv, logit_scale, queries_mask=None, documents_mask=None):
+    """MaxSim over negative Lorentz distance, scaled by logit_scale.
+
+    q [Nq, Lq, D+1], docs [Nq, B, Ld, D+1] -> scores [Nq, B]."""
+    sim = lorentz_pairwise_sim(q.float().unsqueeze(1), docs.float(), curv)  # [Nq,B,Lq,Ld]
+    return _maxsim_reduce(sim, logit_scale, queries_mask, documents_mask)
+
+
+def cosine_kd_scores(q, docs, logit_scale, queries_mask=None, documents_mask=None):
+    """MaxSim over cosine similarity of the SPATIAL components of lifted embeddings."""
+    qs = torch.nn.functional.normalize(q[..., 1:].float(), dim=-1)
+    ds = torch.nn.functional.normalize(docs[..., 1:].float(), dim=-1)
+    sim = torch.matmul(qs.unsqueeze(1), ds.transpose(-1, -2))  # [Nq,B,Lq,Ld]
+    return _maxsim_reduce(sim, logit_scale, queries_mask, documents_mask)

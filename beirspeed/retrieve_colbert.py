@@ -20,27 +20,31 @@ from .halo import find_lift, load_colbert_with_lift
 from .metrics import evaluate
 
 
-def maxsim_scores(q, q_mask, d, d_mask, q_chunk=32, curv=None):
+def maxsim_scores(q, q_mask, d, d_mask, q_chunk=32, curv=None, mode="dot"):
     """q [Q,Lq,dim], d [n,Ld,dim] (cuda) -> scores [Q,n] fp32.
 
-    curv=None: dot-product MaxSim (fp16). curv set: negative Lorentz distance
-    over lifted embeddings [x0, xs], computed in fp32."""
+    mode "dot": dot-product MaxSim (fp16). "lorentz": negative Lorentz distance
+    over lifted embeddings [x0, xs] in fp32. "hybrid" (HALO mainline):
+    0.5 * spatial cosine + 0.5 * negative Lorentz distance."""
     out = torch.empty(q.shape[0], d.shape[0], device=q.device, dtype=torch.float32)
-    if curv is not None:
+    if mode != "dot":
         q_chunk = max(q_chunk // 4, 4)
         d = d.float()
+        d_norm = torch.nn.functional.normalize(d[..., 1:], dim=-1) if mode == "hybrid" else None
     neg = torch.finfo(torch.float16).min
     for b0 in range(0, q.shape[0], q_chunk):
         qb = q[b0:b0 + q_chunk]                                   # [b,Lq,dim]
-        if curv is None:
+        if mode == "dot":
             sim = torch.einsum("bld,ntd->bnlt", qb, d)            # [b,n,Lq,Ld]
-            sim = sim.masked_fill(~d_mask[None, :, None, :], neg)
         else:
             qb = qb.float()
             ip = torch.einsum("bld,ntd->bnlt", qb[..., 1:], d[..., 1:])
             ip = ip - qb[..., 0].unsqueeze(-1).unsqueeze(1) * d[..., 0][None, :, None, :]
             sim = -torch.acosh(torch.clamp(-curv * ip, min=1.0 + 1e-6)) / (curv ** 0.5)
-            sim = sim.masked_fill(~d_mask[None, :, None, :], neg)
+            if mode == "hybrid":
+                qn = torch.nn.functional.normalize(qb[..., 1:], dim=-1)
+                sim = 0.5 * torch.einsum("bld,ntd->bnlt", qn, d_norm) + 0.5 * sim
+        sim = sim.masked_fill(~d_mask[None, :, None, :], neg)
         best = sim.max(dim=-1).values.float()                     # [b,n,Lq]
         best = best * q_mask[b0:b0 + q_chunk][:, None, :]
         out[b0:b0 + q_chunk] = best.sum(dim=-1)
@@ -89,8 +93,9 @@ def main():
     model = load_colbert_with_lift(args.model_dir).to("cuda").eval()
     lift = find_lift(model)
     curv = float(lift.curv()) if lift is not None else None
+    mode = "dot" if lift is None else getattr(lift, "score_mode", "lorentz")
     if curv is not None:
-        print("HALO retrieval: negative Lorentz distance, curv=%.4f" % curv)
+        print("HALO retrieval: mode=%s curv=%.4f" % (mode, curv))
     q_embs = model.encode([queries[q] for q in qids], batch_size=256, is_query=True,
                           normalize_embeddings=lift is None,
                           convert_to_numpy=True, show_progress_bar=False)
@@ -116,7 +121,7 @@ def main():
             flat = torch.from_numpy(tokens[starts[c0]:starts[c1]]).to("cuda")
             d = torch.nn.utils.rnn.pad_sequence(flat.split(cl.tolist()), batch_first=True)
             d_mask = (torch.arange(d.shape[1], device="cuda")[None, :] < cl.to("cuda")[:, None])
-            scores = maxsim_scores(q, q_mask, d, d_mask, curv=curv)
+            scores = maxsim_scores(q, q_mask, d, d_mask, curv=curv, mode=mode)
             s, i = torch.topk(scores, min(keep, scores.shape[1]), dim=1)
             top_scores = torch.cat([top_scores, s], dim=1)
             top_idx = torch.cat([top_idx, i + offset + c0], dim=1)
@@ -147,7 +152,8 @@ def main():
         "eval_backend": backend,
         "config": {"model": args.model_dir.rstrip("/").split("/")[-1],
                    "scoring": "colbert_maxsim",
-                   "similarity": "neg_lorentz_distance" if curv is not None else "dot",
+                   "similarity": {"dot": "dot", "lorentz": "neg_lorentz_distance",
+                                  "hybrid": "hybrid_cos_neg_lorentz"}[mode],
                    "curv": curv},
     }
     with gzip.open(os.path.join(out_dir, "run.tsv.gz"), "wt", encoding="utf-8") as f:
