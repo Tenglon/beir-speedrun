@@ -31,11 +31,22 @@ from beirspeed.halo import HALOLift, cosine_kd_scores, lorentz_kd_scores
 class LorentzDistillation(losses.Distillation):
     """KD loss over HALO geometry. score_mode="lorentz": pure negative Lorentz
     distance. score_mode="hybrid" (HALO mainline): 0.5 * KL(cosine branch) +
-    0.5 * KL(lorentz branch), mirroring HALO's hybrid loss mixing."""
+    0.5 * KL(lorentz branch), mirroring HALO's hybrid loss mixing.
+
+    Student scores are z-scored per candidate list before the learnable
+    temperature is applied: standardization removes the global-scale degree of
+    freedom (whole-space contraction no longer reduces the loss — runs 3/4
+    collapsed to the hyperboloid vertex through exactly that channel), while
+    the temperature still meaningfully controls relative sharpness."""
 
     def __init__(self, model, score_mode="lorentz"):
         super().__init__(model=model, normalize_scores=False)
         self.score_mode = score_mode
+
+    @staticmethod
+    def _zscore(scores):
+        return (scores - scores.mean(dim=-1, keepdim=True)) / (
+            scores.std(dim=-1, keepdim=True) + 1e-6)
 
     def forward(self, sentence_features, labels):
         q_out = self.model(sentence_features[0])
@@ -49,17 +60,18 @@ class LorentzDistillation(losses.Distillation):
         queries_mask = None if inner.do_query_expansion else masks[0]
 
         curv, scale = q_out["halo_curv"], q_out["halo_logit_scale"]
+        one = torch.ones((), device=q.device, dtype=torch.float32)
         log_teacher = torch.nn.functional.log_softmax(labels, dim=-1)
-        lor = lorentz_kd_scores(q, docs, curv, scale,
+        lor = lorentz_kd_scores(q, docs, curv, one,
                                 queries_mask=queries_mask, documents_mask=documents_mask)
         lor_loss = self.loss_function(
-            torch.nn.functional.log_softmax(lor, dim=-1), log_teacher)
+            torch.nn.functional.log_softmax(scale * self._zscore(lor), dim=-1), log_teacher)
         if self.score_mode == "lorentz":
             return lor_loss
-        cos = cosine_kd_scores(q, docs, scale,
+        cos = cosine_kd_scores(q, docs, one,
                                queries_mask=queries_mask, documents_mask=documents_mask)
         cos_loss = self.loss_function(
-            torch.nn.functional.log_softmax(cos, dim=-1), log_teacher)
+            torch.nn.functional.log_softmax(scale * self._zscore(cos), dim=-1), log_teacher)
         return 0.5 * cos_loss + 0.5 * lor_loss
 
 
