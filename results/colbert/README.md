@@ -45,6 +45,15 @@ subset; this run reaches 0.5085 on 14 — the stronger KD dataset (LLM-grade tea
 listwise scores, ColBERT-mined negatives) does the work the plain mined-triplets
 collection cannot. Full per-metric numbers in `results_table.md`.
 
+## run1 vs run2 on full BEIR
+
+Both best checkpoints were also compared on the full suite (run1 = checkpoint-40000,
+its small6 peak; table in `results_table_run1.md`): avg nDCG@10 **0.5038 (run1)** vs
+**0.5085 (run2)**. The small6 gap (+0.0023) held and widened (+0.0047) at full scale
+— run2 wins on 12 of 15 datasets (run1 ahead only on fever +0.007, cqadupstack and
+scidocs by <0.001), confirming both the checkpoint selection and the larger-batch
+6-epoch recipe.
+
 Training cost: ~5h per run (4 or 8 H100); strong-scaling at fixed global batch 32:
 1/2/4/8/16 GPUs -> 100% / 98.4% / 92.5% / 76.3% / 54.5% efficiency (per-GPU
 micro-batch 8 keeps 8 GPUs near-linear instead: 0.33s/step at global 64).

@@ -1,0 +1,295 @@
+{
+ "arguana": {
+  "dataset": "arguana",
+  "split": "test",
+  "num_queries": 1406,
+  "num_docs": 8674,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.36593,
+   "ndcg_cut_10": 0.43615,
+   "ndcg_cut_100": 0.48935,
+   "recall_100": 0.90825
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "climate-fever": {
+  "dataset": "climate-fever",
+  "split": "test",
+  "num_queries": 1535,
+  "num_docs": 5416593,
+  "num_shards": 11,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.27952,
+   "ndcg_cut_10": 0.20717,
+   "ndcg_cut_100": 0.28396,
+   "recall_100": 0.53368
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "dbpedia-entity": {
+  "dataset": "dbpedia-entity",
+  "split": "test",
+  "num_queries": 400,
+  "num_docs": 4635922,
+  "num_shards": 10,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.77991,
+   "ndcg_cut_10": 0.46324,
+   "ndcg_cut_100": 0.52683,
+   "recall_100": 0.61429
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "fever": {
+  "dataset": "fever",
+  "split": "test",
+  "num_queries": 6666,
+  "num_docs": 5416568,
+  "num_shards": 11,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.81753,
+   "ndcg_cut_10": 0.81535,
+   "ndcg_cut_100": 0.8292,
+   "recall_100": 0.95779
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "fiqa": {
+  "dataset": "fiqa",
+  "split": "test",
+  "num_queries": 648,
+  "num_docs": 57638,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.44969,
+   "ndcg_cut_10": 0.37452,
+   "ndcg_cut_100": 0.43282,
+   "recall_100": 0.66326
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "hotpotqa": {
+  "dataset": "hotpotqa",
+  "split": "test",
+  "num_queries": 7405,
+  "num_docs": 5233329,
+  "num_shards": 11,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.9022,
+   "ndcg_cut_10": 0.72924,
+   "ndcg_cut_100": 0.75934,
+   "recall_100": 0.86489
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "msmarco": {
+  "dataset": "msmarco",
+  "split": "dev",
+  "num_queries": 6980,
+  "num_docs": 8841823,
+  "num_shards": 18,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.38265,
+   "ndcg_cut_10": 0.45006,
+   "ndcg_cut_100": 0.50136,
+   "recall_100": 0.90915
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "nfcorpus": {
+  "dataset": "nfcorpus",
+  "split": "test",
+  "num_queries": 323,
+  "num_docs": 3633,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.57741,
+   "ndcg_cut_10": 0.34966,
+   "ndcg_cut_100": 0.31245,
+   "recall_100": 0.28764
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "nq": {
+  "dataset": "nq",
+  "split": "test",
+  "num_queries": 3452,
+  "num_docs": 2681468,
+  "num_shards": 6,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.52798,
+   "ndcg_cut_10": 0.57896,
+   "ndcg_cut_100": 0.61836,
+   "recall_100": 0.95153
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "quora": {
+  "dataset": "quora",
+  "split": "test",
+  "num_queries": 10000,
+  "num_docs": 522931,
+  "num_shards": 2,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.80205,
+   "ndcg_cut_10": 0.81221,
+   "ndcg_cut_100": 0.83291,
+   "recall_100": 0.98328
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "scidocs": {
+  "dataset": "scidocs",
+  "split": "test",
+  "num_queries": 1000,
+  "num_docs": 25657,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.30202,
+   "ndcg_cut_10": 0.16871,
+   "ndcg_cut_100": 0.23908,
+   "recall_100": 0.37858
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "scifact": {
+  "dataset": "scifact",
+  "split": "test",
+  "num_queries": 300,
+  "num_docs": 5183,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.69689,
+   "ndcg_cut_10": 0.72497,
+   "ndcg_cut_100": 0.75024,
+   "recall_100": 0.941
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "trec-covid": {
+  "dataset": "trec-covid",
+  "split": "test",
+  "num_queries": 50,
+  "num_docs": 171332,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.955,
+   "ndcg_cut_10": 0.71631,
+   "ndcg_cut_100": 0.52081,
+   "recall_100": 0.12643
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "webis-touche2020": {
+  "dataset": "webis-touche2020",
+  "split": "test",
+  "num_queries": 49,
+  "num_docs": 382545,
+  "num_shards": 1,
+  "k": 100,
+  "metrics": {
+   "mrr_10": 0.55552,
+   "ndcg_cut_10": 0.29634,
+   "ndcg_cut_100": 0.40746,
+   "recall_100": 0.51295
+  },
+  "eval_backend": "pytrec_eval",
+  "config": {
+   "model": "checkpoint-40000",
+   "scoring": "colbert_maxsim",
+   "similarity": "maxsim"
+  }
+ },
+ "cqadupstack": {
+  "dataset": "cqadupstack",
+  "split": "test",
+  "num_queries": 13145,
+  "num_docs": 457199,
+  "metrics": {
+   "ndcg_cut_10": 0.38099583333333337,
+   "ndcg_cut_100": 0.42449749999999997,
+   "recall_100": 0.6640591666666666,
+   "mrr_10": 0.3789475
+  },
+  "sub_datasets": 12
+ }
+}
