@@ -15,6 +15,7 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import torch
+import torch.distributed.tensor  # noqa: F401  (peft probes DTensor; torch 2.11 needs the explicit import)
 from datasets import load_dataset
 from peft import LoraConfig, get_peft_model
 from pylate import losses, models, utils
