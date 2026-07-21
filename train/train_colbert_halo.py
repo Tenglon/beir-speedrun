@@ -18,7 +18,7 @@ import torch
 from datasets import load_dataset
 from peft import LoraConfig, get_peft_model
 from pylate import losses, models, utils
-from pylate.utils import extract_skiplist_mask
+from pylate.losses.contrastive import extract_skiplist_mask
 from sentence_transformers import (
     SentenceTransformerTrainer,
     SentenceTransformerTrainingArguments,
