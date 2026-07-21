@@ -25,7 +25,12 @@ from sentence_transformers import (
     SentenceTransformerTrainingArguments,
 )
 
-from beirspeed.halo import HALOLift, cosine_kd_scores, lorentz_kd_scores
+from beirspeed.halo import (
+    HALOLift,
+    cosine_kd_scores,
+    inbatch_nce_scores,
+    lorentz_kd_scores,
+)
 
 
 class LorentzDistillation(losses.Distillation):
@@ -33,15 +38,18 @@ class LorentzDistillation(losses.Distillation):
     distance. score_mode="hybrid" (HALO mainline): 0.5 * KL(cosine branch) +
     0.5 * KL(lorentz branch), mirroring HALO's hybrid loss mixing.
 
-    Student scores are z-scored per candidate list before the learnable
-    temperature is applied: standardization removes the global-scale degree of
-    freedom (whole-space contraction no longer reduces the loss — runs 3/4
-    collapsed to the hyperboloid vertex through exactly that channel), while
-    the temperature still meaningfully controls relative sharpness."""
+    KD branch: student scores z-scored per candidate list, then a learnable
+    kd_scale — standardization removes the global-scale degree of freedom
+    (runs 3/4 collapsed to the hyperboloid vertex through that channel).
+    InfoNCE branch (w_nce > 0): in-batch contrastive over RAW eval-consistent
+    scores x logit_scale — absolute distance scale receives real gradient
+    pressure, so the geometry's magnitude structure is part of the objective."""
 
-    def __init__(self, model, score_mode="lorentz"):
+    def __init__(self, model, score_mode="lorentz", w_kd=0.5, w_nce=0.5):
         super().__init__(model=model, normalize_scores=False)
         self.score_mode = score_mode
+        self.w_kd = w_kd
+        self.w_nce = w_nce
 
     @staticmethod
     def _zscore(scores):
@@ -59,20 +67,32 @@ class LorentzDistillation(losses.Distillation):
         documents_mask = masks[1].view(q.size(0), -1, *masks[1].shape[1:])
         queries_mask = None if inner.do_query_expansion else masks[0]
 
-        curv, scale = q_out["halo_curv"], q_out["halo_logit_scale"]
+        curv = q_out["halo_curv"]
+        nce_scale, kd_scale = q_out["halo_logit_scale"], q_out["halo_kd_scale"]
         one = torch.ones((), device=q.device, dtype=torch.float32)
         log_teacher = torch.nn.functional.log_softmax(labels, dim=-1)
+
         lor = lorentz_kd_scores(q, docs, curv, one,
                                 queries_mask=queries_mask, documents_mask=documents_mask)
-        lor_loss = self.loss_function(
-            torch.nn.functional.log_softmax(scale * self._zscore(lor), dim=-1), log_teacher)
-        if self.score_mode == "lorentz":
-            return lor_loss
-        cos = cosine_kd_scores(q, docs, one,
-                               queries_mask=queries_mask, documents_mask=documents_mask)
-        cos_loss = self.loss_function(
-            torch.nn.functional.log_softmax(scale * self._zscore(cos), dim=-1), log_teacher)
-        return 0.5 * cos_loss + 0.5 * lor_loss
+        kd_loss = self.loss_function(
+            torch.nn.functional.log_softmax(kd_scale * self._zscore(lor), dim=-1), log_teacher)
+        if self.score_mode == "hybrid":
+            cos = cosine_kd_scores(q, docs, one,
+                                   queries_mask=queries_mask, documents_mask=documents_mask)
+            cos_loss = self.loss_function(
+                torch.nn.functional.log_softmax(kd_scale * self._zscore(cos), dim=-1), log_teacher)
+            kd_loss = 0.5 * cos_loss + 0.5 * kd_loss
+        if self.w_nce <= 0:
+            return kd_loss
+
+        n_docs_per_query = docs.size(1)
+        nce = inbatch_nce_scores(
+            q, d_out["token_embeddings"], curv, nce_scale, self.score_mode,
+            queries_mask=queries_mask, documents_mask=masks[1])
+        targets = labels.argmax(dim=-1) + torch.arange(
+            q.size(0), device=q.device) * n_docs_per_query
+        nce_loss = torch.nn.functional.cross_entropy(nce, targets)
+        return self.w_kd * kd_loss + self.w_nce * nce_loss
 
 
 def main():
@@ -85,6 +105,8 @@ def main():
     ap.add_argument("--lr", type=float, default=2e-5)
     ap.add_argument("--curv-init", type=float, default=0.1)
     ap.add_argument("--score-mode", choices=["lorentz", "hybrid"], default="hybrid")
+    ap.add_argument("--w-kd", type=float, default=0.5)
+    ap.add_argument("--w-nce", type=float, default=0.5)
     ap.add_argument("--lora-r", type=int, default=32)
     ap.add_argument("--lora-alpha", type=int, default=64)
     ap.add_argument("--max-steps", type=int, default=-1)
@@ -133,7 +155,8 @@ def main():
     )
     trainer = SentenceTransformerTrainer(
         model=model, args=targs, train_dataset=train,
-        loss=LorentzDistillation(model=model, score_mode=args.score_mode),
+        loss=LorentzDistillation(model=model, score_mode=args.score_mode,
+                                 w_kd=args.w_kd, w_nce=args.w_nce),
         data_collator=utils.ColBERTCollator(model.tokenize))
 
     import time
@@ -142,9 +165,9 @@ def main():
     if rank0:
         lift = model[-1]
         dt, steps = time.time() - t0, trainer.state.global_step
-        print("steps=%d time=%.0fs %.2fs/step peak_mem_gb=%.1f curv=%.4f logit_scale=%.3f" % (
+        print("steps=%d time=%.0fs %.2fs/step peak_mem_gb=%.1f curv=%.4f logit_scale=%.3f kd_scale=%.3f" % (
             steps, dt, dt / max(steps, 1), torch.cuda.max_memory_allocated() / 2**30,
-            lift.curv().item(), lift.logit_scale.item()), flush=True)
+            lift.curv().item(), lift.logit_scale.item(), lift.kd_scale.item()), flush=True)
         model[0].auto_model = model[0].auto_model.merge_and_unload()
         model.save_pretrained(os.path.join(args.out_dir, "final"))
 

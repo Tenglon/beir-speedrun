@@ -21,13 +21,16 @@ def inv_softplus(y):
 
 
 class HALOLift(nn.Module):
-    def __init__(self, curv_init=0.1, logit_scale_init=2.6592, score_mode="lorentz"):
+    def __init__(self, curv_init=0.1, logit_scale_init=2.6592, score_mode="lorentz",
+                 kd_scale_init=1.0):
         super().__init__()
         self.curv_init = curv_init
         self.logit_scale_init = logit_scale_init
+        self.kd_scale_init = kd_scale_init
         self.score_mode = score_mode  # "lorentz" | "hybrid" (HALO mainline: 0.5 cos + 0.5 -dist)
         self.curv_raw = nn.Parameter(torch.tensor(inv_softplus(curv_init), dtype=torch.float32))
         self.logit_scale = nn.Parameter(torch.tensor(float(logit_scale_init), dtype=torch.float32))
+        self.kd_scale = nn.Parameter(torch.tensor(float(kd_scale_init), dtype=torch.float32))
 
     def curv(self):
         return torch.nn.functional.softplus(self.curv_raw) + 1e-6
@@ -39,11 +42,12 @@ class HALOLift(nn.Module):
         features["token_embeddings"] = torch.cat([x0.unsqueeze(-1), x], dim=-1)
         features["halo_curv"] = c
         features["halo_logit_scale"] = self.logit_scale.clamp(max=math.log(100.0)).exp()
+        features["halo_kd_scale"] = self.kd_scale.clamp(max=math.log(100.0)).exp()
         return features
 
     def get_config_dict(self):
         return {"curv_init": self.curv_init, "logit_scale_init": self.logit_scale_init,
-                "score_mode": self.score_mode}
+                "score_mode": self.score_mode, "kd_scale_init": self.kd_scale_init}
 
     def save(self, output_path, *args, **kwargs):
         os.makedirs(output_path, exist_ok=True)
@@ -60,7 +64,9 @@ class HALOLift(nn.Module):
         module = HALOLift(**cfg)
         sd = os.path.join(input_path, "pytorch_model.bin")
         if os.path.exists(sd):
-            module.load_state_dict(torch.load(sd, map_location="cpu", weights_only=True))
+            # strict=False: older checkpoints predate kd_scale
+            module.load_state_dict(
+                torch.load(sd, map_location="cpu", weights_only=True), strict=False)
         return module
 
 
@@ -119,3 +125,20 @@ def cosine_kd_scores(q, docs, logit_scale, queries_mask=None, documents_mask=Non
     ds = torch.nn.functional.normalize(docs[..., 1:].float(), dim=-1)
     sim = torch.matmul(qs.unsqueeze(1), ds.transpose(-1, -2))  # [Nq,B,Lq,Ld]
     return _maxsim_reduce(sim, logit_scale, queries_mask, documents_mask)
+
+
+def inbatch_nce_scores(q, docs_flat, curv, logit_scale, mode,
+                       queries_mask=None, documents_mask=None):
+    """Every query vs every document in the batch, eval-consistent token scoring.
+
+    q [Nq, Lq, D+1], docs_flat [Nd, Ld, D+1] -> scores [Nq, Nd].
+    mode "hybrid": 0.5 * spatial cosine + 0.5 * negative Lorentz distance."""
+    qf = q.float().unsqueeze(1)              # [Nq,1,Lq,D+1]
+    df = docs_flat.float().unsqueeze(0)      # [1,Nd,Ld,D+1]
+    sim = lorentz_pairwise_sim(qf, df, curv)
+    if mode == "hybrid":
+        qs = torch.nn.functional.normalize(qf[..., 1:], dim=-1)
+        ds = torch.nn.functional.normalize(df[..., 1:], dim=-1)
+        sim = 0.5 * torch.matmul(qs, ds.transpose(-1, -2)) + 0.5 * sim
+    dmask = documents_mask.unsqueeze(0) if documents_mask is not None else None
+    return _maxsim_reduce(sim, logit_scale, queries_mask, dmask)
