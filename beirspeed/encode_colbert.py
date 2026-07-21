@@ -13,6 +13,7 @@ import torch
 from pylate import models
 
 from .data import iter_corpus
+from .halo import find_lift
 
 
 def main():
@@ -37,6 +38,10 @@ def main():
 
     model = models.ColBERT(model_name_or_path=args.model_dir, document_length=args.doc_length)
     model = model.to("cuda").eval()
+    lift = find_lift(model)
+    normalize = lift is None  # hyperbolic embeddings live on the hyperboloid, not the sphere
+    if lift is not None:
+        print("HALO lift detected: curv=%.4f, storing lifted (dim+1) embeddings" % lift.curv().item())
 
     t0 = time.time()
     ids, texts = [], []
@@ -47,6 +52,7 @@ def main():
 
     t0 = time.time()
     embs = model.encode(texts, batch_size=args.batch_size, is_query=False,
+                        normalize_embeddings=normalize,
                         convert_to_numpy=True, show_progress_bar=False)
     lens = np.array([e.shape[0] for e in embs], dtype=np.int32)
     tokens = np.concatenate(embs, axis=0).astype(np.float16)

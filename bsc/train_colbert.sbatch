@@ -23,7 +23,7 @@ srun --ntasks="$NNODES" --ntasks-per-node=1 --gres=gpu:4 \
   "$VENV/bin/torchrun" \
     --nnodes="$NNODES" --nproc_per_node=4 \
     --rdzv_id="$SLURM_JOB_ID" --rdzv_backend=c10d --rdzv_endpoint="$MASTER:29521" \
-    "$CODE_ROOT/train/train_colbert.py" \
+    "$CODE_ROOT/train/${TRAIN_SCRIPT:-train_colbert.py}" \
       --model-dir "$BEIR_ROOT/models/bert-base-uncased" \
       --data-dir "$BEIR_ROOT/kd_dataset/ms-marco-en-bge-gemma" \
       --out-dir "$OUT_DIR" \

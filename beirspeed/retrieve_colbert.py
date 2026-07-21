@@ -16,17 +16,31 @@ import torch
 from pylate import models
 
 from .data import load_qrels, load_queries
+from .halo import find_lift
 from .metrics import evaluate
 
 
-def maxsim_scores(q, q_mask, d, d_mask, q_chunk=32):
-    """q [Q,Lq,dim], d [n,Ld,dim] (fp16, cuda) -> scores [Q,n] fp32."""
+def maxsim_scores(q, q_mask, d, d_mask, q_chunk=32, curv=None):
+    """q [Q,Lq,dim], d [n,Ld,dim] (cuda) -> scores [Q,n] fp32.
+
+    curv=None: dot-product MaxSim (fp16). curv set: negative Lorentz distance
+    over lifted embeddings [x0, xs], computed in fp32."""
     out = torch.empty(q.shape[0], d.shape[0], device=q.device, dtype=torch.float32)
+    if curv is not None:
+        q_chunk = max(q_chunk // 4, 4)
+        d = d.float()
     neg = torch.finfo(torch.float16).min
     for b0 in range(0, q.shape[0], q_chunk):
         qb = q[b0:b0 + q_chunk]                                   # [b,Lq,dim]
-        sim = torch.einsum("bld,ntd->bnlt", qb, d)                # [b,n,Lq,Ld]
-        sim = sim.masked_fill(~d_mask[None, :, None, :], neg)
+        if curv is None:
+            sim = torch.einsum("bld,ntd->bnlt", qb, d)            # [b,n,Lq,Ld]
+            sim = sim.masked_fill(~d_mask[None, :, None, :], neg)
+        else:
+            qb = qb.float()
+            ip = torch.einsum("bld,ntd->bnlt", qb[..., 1:], d[..., 1:])
+            ip = ip - qb[..., 0].unsqueeze(-1).unsqueeze(1) * d[..., 0][None, :, None, :]
+            sim = -torch.acosh(torch.clamp(-curv * ip, min=1.0 + 1e-6)) / (curv ** 0.5)
+            sim = sim.masked_fill(~d_mask[None, :, None, :], neg)
         best = sim.max(dim=-1).values.float()                     # [b,n,Lq]
         best = best * q_mask[b0:b0 + q_chunk][:, None, :]
         out[b0:b0 + q_chunk] = best.sum(dim=-1)
@@ -73,7 +87,12 @@ def main():
     print("%s: %d queries (%s), %d shards" % (args.dataset, len(qids), args.split, len(done)), flush=True)
 
     model = models.ColBERT(model_name_or_path=args.model_dir).to("cuda").eval()
+    lift = find_lift(model)
+    curv = float(lift.curv()) if lift is not None else None
+    if curv is not None:
+        print("HALO retrieval: negative Lorentz distance, curv=%.4f" % curv)
     q_embs = model.encode([queries[q] for q in qids], batch_size=256, is_query=True,
+                          normalize_embeddings=lift is None,
                           convert_to_numpy=True, show_progress_bar=False)
     lq = max(e.shape[0] for e in q_embs)
     dim = q_embs[0].shape[1]
@@ -97,7 +116,7 @@ def main():
             flat = torch.from_numpy(tokens[starts[c0]:starts[c1]]).to("cuda")
             d = torch.nn.utils.rnn.pad_sequence(flat.split(cl.tolist()), batch_first=True)
             d_mask = (torch.arange(d.shape[1], device="cuda")[None, :] < cl.to("cuda")[:, None])
-            scores = maxsim_scores(q, q_mask, d, d_mask)
+            scores = maxsim_scores(q, q_mask, d, d_mask, curv=curv)
             s, i = torch.topk(scores, min(keep, scores.shape[1]), dim=1)
             top_scores = torch.cat([top_scores, s], dim=1)
             top_idx = torch.cat([top_idx, i + offset + c0], dim=1)
@@ -127,7 +146,9 @@ def main():
         "metrics": {name: round(val, 5) for name, val in sorted(means.items())},
         "eval_backend": backend,
         "config": {"model": args.model_dir.rstrip("/").split("/")[-1],
-                   "scoring": "colbert_maxsim", "similarity": "maxsim"},
+                   "scoring": "colbert_maxsim",
+                   "similarity": "neg_lorentz_distance" if curv is not None else "dot",
+                   "curv": curv},
     }
     with gzip.open(os.path.join(out_dir, "run.tsv.gz"), "wt", encoding="utf-8") as f:
         for qid in qids:
