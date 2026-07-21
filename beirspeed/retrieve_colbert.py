@@ -16,7 +16,7 @@ import torch
 from pylate import models
 
 from .data import load_qrels, load_queries
-from .halo import find_lift
+from .halo import find_lift, load_colbert_with_lift
 from .metrics import evaluate
 
 
@@ -86,7 +86,7 @@ def main():
     qids = sorted(queries)
     print("%s: %d queries (%s), %d shards" % (args.dataset, len(qids), args.split, len(done)), flush=True)
 
-    model = models.ColBERT(model_name_or_path=args.model_dir).to("cuda").eval()
+    model = load_colbert_with_lift(args.model_dir).to("cuda").eval()
     lift = find_lift(model)
     curv = float(lift.curv()) if lift is not None else None
     if curv is not None:

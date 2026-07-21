@@ -13,7 +13,7 @@ import torch
 from pylate import models
 
 from .data import iter_corpus
-from .halo import find_lift
+from .halo import find_lift, load_colbert_with_lift
 
 
 def main():
@@ -36,7 +36,7 @@ def main():
         print("already done: %s" % base)
         return
 
-    model = models.ColBERT(model_name_or_path=args.model_dir, document_length=args.doc_length)
+    model = load_colbert_with_lift(args.model_dir, document_length=args.doc_length)
     model = model.to("cuda").eval()
     lift = find_lift(model)
     normalize = lift is None  # hyperbolic embeddings live on the hyperboloid, not the sphere

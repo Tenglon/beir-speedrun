@@ -68,6 +68,22 @@ def find_lift(model):
     return None
 
 
+def load_colbert_with_lift(model_dir, **kwargs):
+    """pylate's ColBERT loader silently drops non-Transformer/Dense modules;
+    re-attach the HALOLift recorded in modules.json if it went missing."""
+    from pylate import models
+
+    model = models.ColBERT(model_name_or_path=model_dir, **kwargs)
+    if find_lift(model) is None:
+        modules_json = os.path.join(model_dir, "modules.json")
+        if os.path.exists(modules_json):
+            with open(modules_json) as f:
+                for entry in json.load(f):
+                    if entry["type"].endswith("HALOLift"):
+                        model.append(HALOLift.load(os.path.join(model_dir, entry["path"])))
+    return model
+
+
 def lorentz_pairwise_sim(q, d, curv, eps=1e-6):
     """Negative Lorentz distance between lifted token sets.
 
