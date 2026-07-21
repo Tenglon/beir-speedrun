@@ -12,6 +12,7 @@ import math
 import os
 
 import torch
+import torch.distributed.tensor  # noqa: F401  (peft probes DTensor when loading LoRA checkpoints)
 from torch import nn
 
 
