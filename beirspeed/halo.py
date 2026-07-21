@@ -49,7 +49,9 @@ class HALOLift(nn.Module):
         torch.save(self.state_dict(), os.path.join(output_path, "pytorch_model.bin"))
 
     @staticmethod
-    def load(input_path, *args, **kwargs):
+    def load(input_path):
+        # exactly one parameter => sentence-transformers uses the old-style loader,
+        # which resolves the module SUBFOLDER and passes it here (ST 5.x dispatch)
         with open(os.path.join(input_path, "config.json")) as f:
             cfg = json.load(f)
         module = HALOLift(**cfg)
