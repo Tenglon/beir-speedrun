@@ -113,6 +113,7 @@ def main():
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--lr", type=float, default=2e-5)
     ap.add_argument("--curv-init", type=float, default=0.1)
+    ap.add_argument("--doc-length", type=int, default=300)
     ap.add_argument("--score-mode", choices=["lorentz", "hybrid"], default="hybrid")
     ap.add_argument("--w-kd", type=float, default=0.5)
     ap.add_argument("--w-nce", type=float, default=0.5)
@@ -126,7 +127,8 @@ def main():
     args = ap.parse_args()
 
     model = models.ColBERT(
-        model_name_or_path=args.model_dir, embedding_size=128, document_length=300)
+        model_name_or_path=args.model_dir, embedding_size=128,
+        document_length=args.doc_length)
     model[0].auto_model = get_peft_model(
         model[0].auto_model,
         LoraConfig(r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=0.05,
