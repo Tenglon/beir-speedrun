@@ -22,22 +22,30 @@ def inv_softplus(y):
 
 class HALOLift(nn.Module):
     def __init__(self, curv_init=0.1, logit_scale_init=2.6592, score_mode="lorentz",
-                 kd_scale_init=1.0, sq_dist=False):
+                 kd_scale_init=1.0, sq_dist=False, squash_radius_init=0.0):
         super().__init__()
         self.curv_init = curv_init
         self.logit_scale_init = logit_scale_init
         self.kd_scale_init = kd_scale_init
         self.score_mode = score_mode  # "lorentz" | "hybrid" (HALO mainline: 0.5 cos + 0.5 -dist)
         self.sq_dist = sq_dist        # squared Lorentz distance (finite gradient at 0)
+        self.squash_radius_init = squash_radius_init  # 0 disables the norm squash
         self.curv_raw = nn.Parameter(torch.tensor(inv_softplus(curv_init), dtype=torch.float32))
         self.logit_scale = nn.Parameter(torch.tensor(float(logit_scale_init), dtype=torch.float32))
         self.kd_scale = nn.Parameter(torch.tensor(float(kd_scale_init), dtype=torch.float32))
+        if squash_radius_init > 0:
+            self.radius_raw = nn.Parameter(
+                torch.tensor(inv_softplus(squash_radius_init), dtype=torch.float32))
 
     def curv(self):
         return torch.nn.functional.softplus(self.curv_raw) + 1e-6
 
     def forward(self, features):
         x = features["token_embeddings"].float()
+        if self.squash_radius_init > 0:
+            # norm squash: direction kept, norms mapped monotonically into (0, R)
+            r = torch.nn.functional.softplus(self.radius_raw) + 1e-6
+            x = r * x / (1.0 + x.norm(dim=-1, keepdim=True))
         c = self.curv()
         x0 = torch.sqrt(torch.clamp(1.0 / c + (x * x).sum(-1), min=1e-6))
         features["token_embeddings"] = torch.cat([x0.unsqueeze(-1), x], dim=-1)
@@ -49,7 +57,7 @@ class HALOLift(nn.Module):
     def get_config_dict(self):
         return {"curv_init": self.curv_init, "logit_scale_init": self.logit_scale_init,
                 "score_mode": self.score_mode, "kd_scale_init": self.kd_scale_init,
-                "sq_dist": self.sq_dist}
+                "sq_dist": self.sq_dist, "squash_radius_init": self.squash_radius_init}
 
     def save(self, output_path, *args, **kwargs):
         os.makedirs(output_path, exist_ok=True)

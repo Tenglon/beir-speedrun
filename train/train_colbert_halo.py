@@ -47,7 +47,8 @@ class LorentzDistillation(losses.Distillation):
     pressure, so the geometry's magnitude structure is part of the objective."""
 
     def __init__(self, model, score_mode="lorentz", w_kd=0.5, w_nce=0.5,
-                 nce_gather=True, doc_length=300, sq_dist=False):
+                 nce_gather=True, doc_length=300, sq_dist=False,
+                 w_ent=0.0, ent_margin=0.5):
         super().__init__(model=model, normalize_scores=False)
         self.score_mode = score_mode
         self.w_kd = w_kd
@@ -55,6 +56,8 @@ class LorentzDistillation(losses.Distillation):
         self.nce_gather = nce_gather
         self.doc_length = doc_length
         self.sq_dist = sq_dist
+        self.w_ent = w_ent
+        self.ent_margin = ent_margin
 
     @staticmethod
     def _zscore(scores):
@@ -102,7 +105,29 @@ class LorentzDistillation(losses.Distillation):
                    + torch.arange(q.size(0), device=q.device) * n_docs_per_query
                    + labels.argmax(dim=-1))
         nce_loss = torch.nn.functional.cross_entropy(nce, targets)
-        return self.w_kd * kd_loss + self.w_nce * nce_loss
+        loss = self.w_kd * kd_loss + self.w_nce * nce_loss
+
+        if self.w_ent > 0:
+            # entailment norm ordering: query tokens (general) should sit closer to
+            # the vertex than their positive doc's tokens (specific). The MARGIN puts
+            # an absolute floor under doc norms — global shrinkage costs relu(margin).
+            q_norm = q[..., 1:].float().norm(dim=-1)                       # [Nq,Lq]
+            if queries_mask is not None:
+                qm = queries_mask.float()
+                q_mean = (q_norm * qm).sum(-1) / qm.sum(-1).clamp(min=1.0)
+            else:
+                q_mean = q_norm.mean(-1)
+            pos = labels.argmax(dim=-1)                                    # [Nq]
+            idx = pos.view(-1, 1, 1, 1).expand(-1, 1, docs.size(2), docs.size(3))
+            d_pos = torch.gather(docs.float(), 1, idx).squeeze(1)          # [Nq,Ld,D+1]
+            dm = torch.gather(documents_mask, 1,
+                              pos.view(-1, 1, 1).expand(-1, 1, documents_mask.size(2))
+                              ).squeeze(1).float()                         # [Nq,Ld]
+            d_norm = d_pos[..., 1:].norm(dim=-1)
+            d_mean = (d_norm * dm).sum(-1) / dm.sum(-1).clamp(min=1.0)
+            ent_loss = torch.nn.functional.relu(q_mean + self.ent_margin - d_mean).mean()
+            loss = loss + self.w_ent * ent_loss
+        return loss
 
 
 def main():
@@ -120,6 +145,9 @@ def main():
     ap.add_argument("--w-nce", type=float, default=0.5)
     ap.add_argument("--nce-gather", type=int, default=1)
     ap.add_argument("--sq-dist", type=int, default=1)
+    ap.add_argument("--squash-radius", type=float, default=4.0)
+    ap.add_argument("--w-ent", type=float, default=0.2)
+    ap.add_argument("--ent-margin", type=float, default=0.5)
     ap.add_argument("--lora-r", type=int, default=32)
     ap.add_argument("--lora-alpha", type=int, default=64)
     ap.add_argument("--max-steps", type=int, default=-1)
@@ -136,7 +164,8 @@ def main():
         LoraConfig(r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=0.05,
                    target_modules=["query", "key", "value", "dense"], bias="none"))
     model.append(HALOLift(curv_init=args.curv_init, score_mode=args.score_mode,
-                          sq_dist=bool(args.sq_dist)))
+                          sq_dist=bool(args.sq_dist),
+                          squash_radius_init=args.squash_radius))
 
     rank0 = int(os.environ.get("RANK", "0")) == 0
     if rank0:
@@ -174,7 +203,8 @@ def main():
                                  w_kd=args.w_kd, w_nce=args.w_nce,
                                  nce_gather=bool(args.nce_gather),
                                  doc_length=args.doc_length,
-                                 sq_dist=bool(args.sq_dist)),
+                                 sq_dist=bool(args.sq_dist),
+                                 w_ent=args.w_ent, ent_margin=args.ent_margin),
         data_collator=utils.ColBERTCollator(model.tokenize))
 
     import time
