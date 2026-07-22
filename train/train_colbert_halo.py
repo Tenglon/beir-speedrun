@@ -28,6 +28,7 @@ from sentence_transformers import (
 from beirspeed.halo import (
     HALOLift,
     cosine_kd_scores,
+    gather_all_docs,
     inbatch_nce_scores,
     lorentz_kd_scores,
 )
@@ -45,11 +46,14 @@ class LorentzDistillation(losses.Distillation):
     scores x logit_scale — absolute distance scale receives real gradient
     pressure, so the geometry's magnitude structure is part of the objective."""
 
-    def __init__(self, model, score_mode="lorentz", w_kd=0.5, w_nce=0.5):
+    def __init__(self, model, score_mode="lorentz", w_kd=0.5, w_nce=0.5,
+                 nce_gather=True, doc_length=300):
         super().__init__(model=model, normalize_scores=False)
         self.score_mode = score_mode
         self.w_kd = w_kd
         self.w_nce = w_nce
+        self.nce_gather = nce_gather
+        self.doc_length = doc_length
 
     @staticmethod
     def _zscore(scores):
@@ -86,11 +90,16 @@ class LorentzDistillation(losses.Distillation):
             return kd_loss
 
         n_docs_per_query = docs.size(1)
+        d_flat, d_flat_mask, rank = d_out["token_embeddings"], masks[1], 0
+        if self.nce_gather:
+            d_flat, d_flat_mask, rank = gather_all_docs(d_flat, d_flat_mask, self.doc_length)
         nce = inbatch_nce_scores(
-            q, d_out["token_embeddings"], curv, nce_scale, self.score_mode,
-            queries_mask=queries_mask, documents_mask=masks[1])
-        targets = labels.argmax(dim=-1) + torch.arange(
-            q.size(0), device=q.device) * n_docs_per_query
+            q, d_flat, curv, nce_scale, self.score_mode,
+            queries_mask=queries_mask, documents_mask=d_flat_mask)
+        local_docs = q.size(0) * n_docs_per_query
+        targets = (rank * local_docs
+                   + torch.arange(q.size(0), device=q.device) * n_docs_per_query
+                   + labels.argmax(dim=-1))
         nce_loss = torch.nn.functional.cross_entropy(nce, targets)
         return self.w_kd * kd_loss + self.w_nce * nce_loss
 
@@ -107,6 +116,7 @@ def main():
     ap.add_argument("--score-mode", choices=["lorentz", "hybrid"], default="hybrid")
     ap.add_argument("--w-kd", type=float, default=0.5)
     ap.add_argument("--w-nce", type=float, default=0.5)
+    ap.add_argument("--nce-gather", type=int, default=1)
     ap.add_argument("--lora-r", type=int, default=32)
     ap.add_argument("--lora-alpha", type=int, default=64)
     ap.add_argument("--max-steps", type=int, default=-1)
@@ -156,7 +166,9 @@ def main():
     trainer = SentenceTransformerTrainer(
         model=model, args=targs, train_dataset=train,
         loss=LorentzDistillation(model=model, score_mode=args.score_mode,
-                                 w_kd=args.w_kd, w_nce=args.w_nce),
+                                 w_kd=args.w_kd, w_nce=args.w_nce,
+                                 nce_gather=bool(args.nce_gather),
+                                 doc_length=args.doc_length),
         data_collator=utils.ColBERTCollator(model.tokenize))
 
     import time

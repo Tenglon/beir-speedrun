@@ -127,6 +127,30 @@ def cosine_kd_scores(q, docs, logit_scale, queries_mask=None, documents_mask=Non
     return _maxsim_reduce(sim, logit_scale, queries_mask, documents_mask)
 
 
+def gather_all_docs(d, d_mask, pad_len):
+    """All-gather doc token embeddings + masks across ranks for NCE negatives.
+
+    Pads Ld to pad_len first (per-rank collators pad to different batch maxima).
+    HALO-style gradient trick: the local rank's slot keeps its autograd graph,
+    remote slots are detached. Returns ([world*Nd, pad_len, D], mask, rank)."""
+    import torch.distributed as dist
+
+    pad = pad_len - d.shape[1]
+    if pad > 0:
+        d = torch.nn.functional.pad(d, (0, 0, 0, pad))
+        d_mask = torch.nn.functional.pad(d_mask, (0, pad))
+    d_mask = d_mask.to(torch.uint8)  # NCCL all_gather chokes on bool
+    if not (dist.is_available() and dist.is_initialized()) or dist.get_world_size() == 1:
+        return d, d_mask, 0
+    world, rank = dist.get_world_size(), dist.get_rank()
+    d_list = [torch.zeros_like(d) for _ in range(world)]
+    m_list = [torch.zeros_like(d_mask) for _ in range(world)]
+    dist.all_gather(d_list, d.contiguous())
+    dist.all_gather(m_list, d_mask.contiguous())
+    d_list[rank] = d
+    return torch.cat(d_list, dim=0), torch.cat(m_list, dim=0), rank
+
+
 def inbatch_nce_scores(q, docs_flat, curv, logit_scale, mode,
                        queries_mask=None, documents_mask=None):
     """Every query vs every document in the batch, eval-consistent token scoring.
