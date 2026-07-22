@@ -22,12 +22,13 @@ def inv_softplus(y):
 
 class HALOLift(nn.Module):
     def __init__(self, curv_init=0.1, logit_scale_init=2.6592, score_mode="lorentz",
-                 kd_scale_init=1.0):
+                 kd_scale_init=1.0, sq_dist=False):
         super().__init__()
         self.curv_init = curv_init
         self.logit_scale_init = logit_scale_init
         self.kd_scale_init = kd_scale_init
         self.score_mode = score_mode  # "lorentz" | "hybrid" (HALO mainline: 0.5 cos + 0.5 -dist)
+        self.sq_dist = sq_dist        # squared Lorentz distance (finite gradient at 0)
         self.curv_raw = nn.Parameter(torch.tensor(inv_softplus(curv_init), dtype=torch.float32))
         self.logit_scale = nn.Parameter(torch.tensor(float(logit_scale_init), dtype=torch.float32))
         self.kd_scale = nn.Parameter(torch.tensor(float(kd_scale_init), dtype=torch.float32))
@@ -47,7 +48,8 @@ class HALOLift(nn.Module):
 
     def get_config_dict(self):
         return {"curv_init": self.curv_init, "logit_scale_init": self.logit_scale_init,
-                "score_mode": self.score_mode, "kd_scale_init": self.kd_scale_init}
+                "score_mode": self.score_mode, "kd_scale_init": self.kd_scale_init,
+                "sq_dist": self.sq_dist}
 
     def save(self, output_path, *args, **kwargs):
         os.makedirs(output_path, exist_ok=True)
@@ -93,13 +95,20 @@ def load_colbert_with_lift(model_dir, **kwargs):
     return model
 
 
-def lorentz_pairwise_sim(q, d, curv, eps=1e-6):
-    """Negative Lorentz distance between lifted token sets.
+def lorentz_pairwise_sim(q, d, curv, eps=1e-4, squared=False):
+    """Negative (squared) Lorentz distance between lifted token sets.
 
-    q [..., Lq, D+1], d [..., Ld, D+1] (fp32) -> sim [..., Lq, Ld]."""
+    q [..., Lq, D+1], d [..., Ld, D+1] (fp32) -> sim [..., Lq, Ld].
+    squared=True: -d^2 = -acosh(z)^2/c — d(acosh^2)/dz -> 2 as z -> 1+, so the
+    gradient stays FINITE at coincident pairs (plain -d has a 1/sqrt(z^2-1)
+    singularity there, which blew up iter-A once the gathered NCE pool made
+    near-duplicate token pairs frequent)."""
     ip = torch.matmul(q[..., 1:], d[..., 1:].transpose(-1, -2))
     ip = ip - q[..., :1] * d[..., 0].unsqueeze(-2)
-    return -torch.acosh(torch.clamp(-curv * ip, min=1.0 + eps)) / torch.sqrt(curv)
+    a = torch.acosh(torch.clamp(-curv * ip, min=1.0 + eps))
+    if squared:
+        return -(a * a) / curv
+    return -a / torch.sqrt(curv)
 
 
 def _maxsim_reduce(sim, logit_scale, queries_mask, documents_mask):
@@ -111,11 +120,12 @@ def _maxsim_reduce(sim, logit_scale, queries_mask, documents_mask):
     return logit_scale * best.sum(dim=-1)
 
 
-def lorentz_kd_scores(q, docs, curv, logit_scale, queries_mask=None, documents_mask=None):
-    """MaxSim over negative Lorentz distance, scaled by logit_scale.
+def lorentz_kd_scores(q, docs, curv, logit_scale, queries_mask=None, documents_mask=None,
+                      squared=False):
+    """MaxSim over negative (squared) Lorentz distance, scaled by logit_scale.
 
     q [Nq, Lq, D+1], docs [Nq, B, Ld, D+1] -> scores [Nq, B]."""
-    sim = lorentz_pairwise_sim(q.float().unsqueeze(1), docs.float(), curv)  # [Nq,B,Lq,Ld]
+    sim = lorentz_pairwise_sim(q.float().unsqueeze(1), docs.float(), curv, squared=squared)
     return _maxsim_reduce(sim, logit_scale, queries_mask, documents_mask)
 
 
@@ -152,14 +162,14 @@ def gather_all_docs(d, d_mask, pad_len):
 
 
 def inbatch_nce_scores(q, docs_flat, curv, logit_scale, mode,
-                       queries_mask=None, documents_mask=None):
+                       queries_mask=None, documents_mask=None, squared=False):
     """Every query vs every document in the batch, eval-consistent token scoring.
 
     q [Nq, Lq, D+1], docs_flat [Nd, Ld, D+1] -> scores [Nq, Nd].
     mode "hybrid": 0.5 * spatial cosine + 0.5 * negative Lorentz distance."""
     qf = q.float().unsqueeze(1)              # [Nq,1,Lq,D+1]
     df = docs_flat.float().unsqueeze(0)      # [1,Nd,Ld,D+1]
-    sim = lorentz_pairwise_sim(qf, df, curv)
+    sim = lorentz_pairwise_sim(qf, df, curv, squared=squared)
     if mode == "hybrid":
         qs = torch.nn.functional.normalize(qf[..., 1:], dim=-1)
         ds = torch.nn.functional.normalize(df[..., 1:], dim=-1)

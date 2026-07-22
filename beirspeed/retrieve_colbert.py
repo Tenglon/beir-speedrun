@@ -20,7 +20,7 @@ from .halo import find_lift, load_colbert_with_lift
 from .metrics import evaluate
 
 
-def maxsim_scores(q, q_mask, d, d_mask, q_chunk=32, curv=None, mode="dot"):
+def maxsim_scores(q, q_mask, d, d_mask, q_chunk=32, curv=None, mode="dot", squared=False):
     """q [Q,Lq,dim], d [n,Ld,dim] (cuda) -> scores [Q,n] fp32.
 
     mode "dot": dot-product MaxSim (fp16). "lorentz": negative Lorentz distance
@@ -40,7 +40,8 @@ def maxsim_scores(q, q_mask, d, d_mask, q_chunk=32, curv=None, mode="dot"):
             qb = qb.float()
             ip = torch.einsum("bld,ntd->bnlt", qb[..., 1:], d[..., 1:])
             ip = ip - qb[..., 0].unsqueeze(-1).unsqueeze(1) * d[..., 0][None, :, None, :]
-            sim = -torch.acosh(torch.clamp(-curv * ip, min=1.0 + 1e-6)) / (curv ** 0.5)
+            a = torch.acosh(torch.clamp(-curv * ip, min=1.0 + 1e-4))
+            sim = -(a * a) / curv if squared else -a / (curv ** 0.5)
             if mode == "hybrid":
                 qn = torch.nn.functional.normalize(qb[..., 1:], dim=-1)
                 sim = 0.5 * torch.einsum("bld,ntd->bnlt", qn, d_norm) + 0.5 * sim
@@ -94,8 +95,9 @@ def main():
     lift = find_lift(model)
     curv = float(lift.curv()) if lift is not None else None
     mode = "dot" if lift is None else getattr(lift, "score_mode", "lorentz")
+    squared = bool(getattr(lift, "sq_dist", False)) if lift is not None else False
     if curv is not None:
-        print("HALO retrieval: mode=%s curv=%.4f" % (mode, curv))
+        print("HALO retrieval: mode=%s curv=%.4f sq_dist=%s" % (mode, curv, squared))
     q_embs = model.encode([queries[q] for q in qids], batch_size=256, is_query=True,
                           normalize_embeddings=lift is None,
                           convert_to_numpy=True, show_progress_bar=False)
@@ -121,7 +123,7 @@ def main():
             flat = torch.from_numpy(tokens[starts[c0]:starts[c1]]).to("cuda")
             d = torch.nn.utils.rnn.pad_sequence(flat.split(cl.tolist()), batch_first=True)
             d_mask = (torch.arange(d.shape[1], device="cuda")[None, :] < cl.to("cuda")[:, None])
-            scores = maxsim_scores(q, q_mask, d, d_mask, curv=curv, mode=mode)
+            scores = maxsim_scores(q, q_mask, d, d_mask, curv=curv, mode=mode, squared=squared)
             s, i = torch.topk(scores, min(keep, scores.shape[1]), dim=1)
             top_scores = torch.cat([top_scores, s], dim=1)
             top_idx = torch.cat([top_idx, i + offset + c0], dim=1)

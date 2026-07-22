@@ -47,13 +47,14 @@ class LorentzDistillation(losses.Distillation):
     pressure, so the geometry's magnitude structure is part of the objective."""
 
     def __init__(self, model, score_mode="lorentz", w_kd=0.5, w_nce=0.5,
-                 nce_gather=True, doc_length=300):
+                 nce_gather=True, doc_length=300, sq_dist=False):
         super().__init__(model=model, normalize_scores=False)
         self.score_mode = score_mode
         self.w_kd = w_kd
         self.w_nce = w_nce
         self.nce_gather = nce_gather
         self.doc_length = doc_length
+        self.sq_dist = sq_dist
 
     @staticmethod
     def _zscore(scores):
@@ -76,7 +77,7 @@ class LorentzDistillation(losses.Distillation):
         one = torch.ones((), device=q.device, dtype=torch.float32)
         log_teacher = torch.nn.functional.log_softmax(labels, dim=-1)
 
-        lor = lorentz_kd_scores(q, docs, curv, one,
+        lor = lorentz_kd_scores(q, docs, curv, one, squared=self.sq_dist,
                                 queries_mask=queries_mask, documents_mask=documents_mask)
         kd_loss = self.loss_function(
             torch.nn.functional.log_softmax(kd_scale * self._zscore(lor), dim=-1), log_teacher)
@@ -94,7 +95,7 @@ class LorentzDistillation(losses.Distillation):
         if self.nce_gather:
             d_flat, d_flat_mask, rank = gather_all_docs(d_flat, d_flat_mask, self.doc_length)
         nce = inbatch_nce_scores(
-            q, d_flat, curv, nce_scale, self.score_mode,
+            q, d_flat, curv, nce_scale, self.score_mode, squared=self.sq_dist,
             queries_mask=queries_mask, documents_mask=d_flat_mask)
         local_docs = q.size(0) * n_docs_per_query
         targets = (rank * local_docs
@@ -118,6 +119,7 @@ def main():
     ap.add_argument("--w-kd", type=float, default=0.5)
     ap.add_argument("--w-nce", type=float, default=0.5)
     ap.add_argument("--nce-gather", type=int, default=1)
+    ap.add_argument("--sq-dist", type=int, default=1)
     ap.add_argument("--lora-r", type=int, default=32)
     ap.add_argument("--lora-alpha", type=int, default=64)
     ap.add_argument("--max-steps", type=int, default=-1)
@@ -133,7 +135,8 @@ def main():
         model[0].auto_model,
         LoraConfig(r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=0.05,
                    target_modules=["query", "key", "value", "dense"], bias="none"))
-    model.append(HALOLift(curv_init=args.curv_init, score_mode=args.score_mode))
+    model.append(HALOLift(curv_init=args.curv_init, score_mode=args.score_mode,
+                          sq_dist=bool(args.sq_dist)))
 
     rank0 = int(os.environ.get("RANK", "0")) == 0
     if rank0:
@@ -170,7 +173,8 @@ def main():
         loss=LorentzDistillation(model=model, score_mode=args.score_mode,
                                  w_kd=args.w_kd, w_nce=args.w_nce,
                                  nce_gather=bool(args.nce_gather),
-                                 doc_length=args.doc_length),
+                                 doc_length=args.doc_length,
+                                 sq_dist=bool(args.sq_dist)),
         data_collator=utils.ColBERTCollator(model.tokenize))
 
     import time
