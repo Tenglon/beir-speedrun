@@ -17,7 +17,7 @@ def radial_order_loss(rho_parent, rho_child, margin=0.05):
 
 
 def radius_variance_loss(rho, valid, std_min=0.03, rho_safe=0.90):
-    r = rho[valid.bool()]
+    r = rho.reshape(-1)[valid.reshape(-1).bool()]
     if r.numel() < 2:
         return rho.new_zeros(())
     anti_collapse = (std_min - r.std()).clamp_min(0)
