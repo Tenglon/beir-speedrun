@@ -114,7 +114,8 @@ class ConeColBERT(nn.Module):
                 best = lse_temperature * torch.logsumexp(pair / lse_temperature, dim=-1)
             else:
                 best = pair.max(dim=-1).values
-            return (best * q_valid.unsqueeze(1)).sum(-1)
+            # original ColBERT semantics: [MASK] query-expansion tokens count
+            return best.sum(-1)
 
         scores = aggregate(m_masked, train_aggregation)
         with torch.no_grad() if not self.training else torch.enable_grad():

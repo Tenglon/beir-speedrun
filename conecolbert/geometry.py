@@ -31,8 +31,10 @@ def exterior_angle(x, y, eps=EPS):
     xy = (x * y).sum(-1)
     nx2 = (x * x).sum(-1)
     ny2 = (y * y).sum(-1)
-    norm_x = nx2.clamp_min(0).sqrt().clamp_min(eps)
-    norm_xy = (nx2 + ny2 - 2 * xy).clamp_min(0).sqrt().clamp_min(eps)
+    # clamp BEFORE sqrt: sqrt'(0) is inf and 0*inf = NaN poisons autograd even
+    # through masked_fill-ed (zero-gradient) positions
+    norm_x = nx2.clamp_min(eps * eps).sqrt()
+    norm_xy = (nx2 + ny2 - 2 * xy).clamp_min(eps * eps).sqrt()
     sqrt_term = (1.0 + nx2 * ny2 - 2.0 * xy).clamp_min(eps).sqrt()
     acos_input = ((xy * (1.0 + nx2) - nx2 * (1.0 + ny2))
                   / (norm_x * norm_xy * sqrt_term)).clamp(-1 + eps, 1 - eps)
@@ -47,6 +49,14 @@ def cone_violation(query_points, document_points, query_mask=None, document_mask
     pairs get a violation large enough that MaxSim never selects them."""
     q = query_points.float()
     d = document_points.float()
+    # padding points are zero vectors where every angle term is singular; swap
+    # in a safe interior dummy (violations there are overwritten below anyway)
+    safe = torch.zeros_like(q[..., :1, :])
+    safe[..., 0] = 0.5
+    if query_mask is not None:
+        q = torch.where(query_mask.bool().unsqueeze(-1), q, safe)
+    if document_mask is not None:
+        d = torch.where(document_mask.bool().unsqueeze(-1), d, safe)
     xi = exterior_angle(q, d, eps)
     psi = cone_aperture(q, cone_k, eps).unsqueeze(-1)
     v = (xi - psi).clamp_min(0.0)
