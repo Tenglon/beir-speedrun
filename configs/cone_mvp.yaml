@@ -1,0 +1,51 @@
+model:
+  backbone_name_or_path: /gpfs/scratch/ehpc821/uoa994647/beir_speedrun/colbert/run2_8gpu/checkpoint-60000
+  euclidean_dim: 128
+  hyperbolic_dim: 32
+  share_direction_head: true
+  share_radial_head: false
+geometry:
+  type: poincare_cone
+  curvature: 1.0
+  rho_min: 0.12
+  rho_max: 0.95
+  cone_k: 0.10
+  eps: 1.0e-6
+  force_fp32_geometry: true
+  radial_penalty_weight: 0.0
+  radial_margin: 0.0
+fusion:
+  gate_bias_init: -2.0
+  hyperbolic_scale_init: 0.0
+  hyperbolic_scale_max: 0.25
+  warmup_steps: 2000
+interaction:
+  euclidean_temperature: 1.0
+  train_aggregation: logsumexp
+  eval_aggregation: max
+  lse_temperature_start: 0.10
+  lse_temperature_end: 0.03
+loss:
+  ranking_weight: 1.0
+  distillation_weight: 1.0
+  residual_weight: 0.5
+  cone_weight: 0.1
+  order_weight: 0.1
+  radius_variance_weight: 0.01
+  preserve_weight: 0.1
+  cone_margin: 0.10
+  radial_order_margin: 0.05
+  radius_std_min: 0.03
+alignment:
+  min_cosine: 0.45
+  ignore_special_tokens: true
+  ignore_punctuation: true
+  confidence_power: 2.0
+optimization:
+  precision: bf16
+  geometry_precision: fp32
+  gradient_clip_norm: 1.0
+  hyperbolic_head_lr: 1.0e-4
+  euclidean_head_lr: 2.0e-5
+  backbone_top_lr: 5.0e-6
+  weight_decay: 0.01
