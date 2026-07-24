@@ -91,10 +91,15 @@ def main():
                         out.document_radii, d_valid.view(B, args.n_docs, -1)))
         loss = geo_loss
         if warm > 0:
-            log_s = torch.log_softmax(out.scores, -1)
-            log_t = torch.log_softmax(t_scores, -1)
-            loss = loss + torch.nn.functional.kl_div(log_s, log_t, log_target=True,
-                                                     reduction="batchmean")
+            # spec 6.6: teacher-residual warm-up on centered scores — only the
+            # correction is trained, so the gate cannot be pushed to saturation
+            # the way full listwise KL pushes it (phase-2 full-run failure mode)
+            r_t = t_scores - out.euclidean_scores.detach()
+            r_t = r_t - r_t.mean(-1, keepdim=True)
+            c_h = out.cone_corrections
+            c_h = c_h - c_h.mean(-1, keepdim=True)
+            loss = loss + torch.nn.functional.huber_loss(c_h, r_t)
+            loss = loss + 0.05 * (out.gates[content].mean() - 0.3).pow(2)
         opt.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(trainable, 1.0)
