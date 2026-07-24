@@ -21,7 +21,7 @@ CKPT = os.environ.get("COLBERT_CHECKPOINT", ROOT + "/colbert/run2_8gpu/checkpoin
 def setup():
     if not os.path.isdir(CKPT):
         pytest.skip("checkpoint not available: " + CKPT)
-    colbert = models.ColBERT(model_name_or_path=CKPT)
+    colbert = models.ColBERT(model_name_or_path=CKPT, device="cpu")
     model = ConeColBERT(colbert).eval()
     queries = ["what treats lung cancer", "capital of france"]
     docs = ["chemotherapy is a common treatment for lung cancer",
