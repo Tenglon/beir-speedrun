@@ -26,11 +26,12 @@ def exterior_angle(x, y, eps=EPS):
     """Xi(x,y): angle at x between the geodesic ray from the origin through x
     (extended outward) and the geodesic from x to y. x [...,Q,H], y [...,D,H]
     broadcast to [...,Q,D]."""
-    x = x.float().unsqueeze(-2)   # [...,Q,1,H]
-    y = y.float().unsqueeze(-3)   # [...,1,D,H]
-    xy = (x * y).sum(-1)
-    nx2 = (x * x).sum(-1)
-    ny2 = (y * y).sum(-1)
+    x = x.float()
+    y = y.float()
+    # batched GEMM keeps memory at [...,Q,D]; never materialize [...,Q,D,H]
+    xy = torch.matmul(x, y.transpose(-1, -2))
+    nx2 = (x * x).sum(-1).unsqueeze(-1)
+    ny2 = (y * y).sum(-1).unsqueeze(-2)
     # clamp BEFORE sqrt: sqrt'(0) is inf and 0*inf = NaN poisons autograd even
     # through masked_fill-ed (zero-gradient) positions
     norm_x = nx2.clamp_min(eps * eps).sqrt()
@@ -61,7 +62,8 @@ def cone_violation(query_points, document_points, query_mask=None, document_mask
     psi = cone_aperture(q, cone_k, eps).unsqueeze(-1)
     v = (xi - psi).clamp_min(0.0)
 
-    dist2 = ((q.unsqueeze(-2) - d.unsqueeze(-3)) ** 2).sum(-1)
+    dist2 = ((q * q).sum(-1).unsqueeze(-1) + (d * d).sum(-1).unsqueeze(-2)
+             - 2.0 * torch.matmul(q, d.transpose(-1, -2)))
     v = torch.where(dist2 < identical_tol**2, torch.zeros_like(v), v)
 
     if document_mask is not None:

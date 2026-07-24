@@ -35,7 +35,7 @@ def encode(model, texts, is_query, bs=128):
 
 
 @torch.no_grad()
-def search(qE, qP, qG, dE, dP, dM, scale, k=100, chunk=2048, q_chunk=16):
+def search(qE, qP, qG, dE, dP, dM, scale, k=100, chunk=1024, q_chunk=8):
     n = dE.shape[0]
     outs = []
     for q0 in range(0, qE.shape[0], q_chunk):
