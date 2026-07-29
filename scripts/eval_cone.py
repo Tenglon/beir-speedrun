@@ -35,7 +35,7 @@ def encode(model, texts, is_query, bs=128):
 
 
 @torch.no_grad()
-def search(qE, qP, qG, dE, dP, dM, scale, k=100, chunk=1024, q_chunk=8):
+def search(qE, qP, qG, dE, dP, dM, scale, v0=0.0, k=100, chunk=1024, q_chunk=8):
     n = dE.shape[0]
     outs = []
     for q0 in range(0, qE.shape[0], q_chunk):
@@ -52,7 +52,7 @@ def search(qE, qP, qG, dE, dP, dM, scale, k=100, chunk=1024, q_chunk=8):
                                dp.unsqueeze(0).expand(qe.shape[0], -1, -1, -1).flatten(0, 1),
                                document_mask=dm.unsqueeze(0).expand(qe.shape[0], -1, -1).flatten(0, 1)
                                ).view(qe.shape[0], de.shape[0], qe.shape[1], -1)
-            m = e - scale * qg.unsqueeze(1).unsqueeze(-1) * (v - model.v0().item()).clamp_min(0)
+            m = e - scale * qg.unsqueeze(1).unsqueeze(-1) * (v - v0).clamp_min(0)
             neg = torch.finfo(torch.float32).min
             se_l.append(e.masked_fill(~dm[None, :, None, :], neg).max(-1).values.sum(-1))
             sf_l.append(m.masked_fill(~dm[None, :, None, :], neg).max(-1).values.sum(-1))
@@ -61,14 +61,14 @@ def search(qE, qP, qG, dE, dP, dM, scale, k=100, chunk=1024, q_chunk=8):
     return se, sf
 
 
-def run_dataset(model, scale, ds, out):
+def run_dataset(model, scale, v0, ds, out):
     qrels = load_qrels(ROOT + "/datasets", ds, "test")
     queries = load_queries(ROOT + "/datasets", ds, qids=set(qrels))
     qids = sorted(queries)
     ids, texts = zip(*list(iter_corpus(ROOT + "/datasets", ds, 0, 10**9)))
     qE, qP, _, qG = encode(model, [queries[q] for q in qids], True)
     dE, dP, dM, _ = encode(model, list(texts), False)
-    se, sf, = search(qE, qP, qG, dE, dP, dM, scale)
+    se, sf, = search(qE, qP, qG, dE, dP, dM, scale, v0)
     res = {}
     for name, s in [("euclid", se), ("fused", sf)]:
         topv, topi = s.topk(min(100, s.shape[1]), dim=1)
@@ -102,7 +102,7 @@ def main():
 
     out = {}
     for ds in args.datasets:
-        run_dataset(model, scale, ds, out)
+        run_dataset(model, scale, model.v0().item(), ds, out)
     print("SUMMARY", json.dumps(out), flush=True)
 
 
