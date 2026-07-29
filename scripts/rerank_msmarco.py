@@ -69,6 +69,8 @@ def main():
     model.gate.load_state_dict(st["gate"])
     with torch.no_grad():
         model.scale_raw.fill_(float(st["scale_raw"]))
+        if "v0_raw" in st:
+            model.v0_raw.fill_(float(st["v0_raw"]))
     scale = model.hyperbolic_scale().item()
     print("scale=%.3f" % scale, flush=True)
 
@@ -88,7 +90,7 @@ def main():
         e = torch.einsum("lh,dth->dlt", qe, de)
         v = cone_violation(qp.unsqueeze(0).expand(de.shape[0], -1, -1), dp,
                            document_mask=dm)
-        m = e - scale * qg.unsqueeze(0).unsqueeze(-1) * v
+        m = e - scale * qg.unsqueeze(0).unsqueeze(-1) * (v - model.v0().item()).clamp_min(0)
         neg = torch.finfo(torch.float32).min
         se = e.masked_fill(~dm.unsqueeze(1), neg).max(-1).values.sum(-1)
         sf = m.masked_fill(~dm.unsqueeze(1), neg).max(-1).values.sum(-1)

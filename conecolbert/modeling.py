@@ -68,6 +68,12 @@ class ConeColBERT(nn.Module):
         self.scale_raw = nn.Parameter(torch.tensor(float(hyperbolic_scale_init)))
         self.scale_max = hyperbolic_scale_max
         self.cone_k = cone_k
+        # violation threshold: corrections fire only on V > v0 (OOD noise guard);
+        # v0 raw <=0 keeps relu(v0)=0 => exact parity behavior preserved at init
+        self.v0_raw = nn.Parameter(torch.tensor(-2.0))
+
+    def v0(self):
+        return torch.nn.functional.softplus(self.v0_raw) * 0.1
 
     def hyperbolic_scale(self):
         return self.scale_raw.clamp(0.0, self.scale_max)
@@ -105,7 +111,8 @@ class ConeColBERT(nn.Module):
         ).view(B, n_docs, Lq, -1)
 
         scale = self.hyperbolic_scale()
-        m = e - scale * gates.unsqueeze(1).unsqueeze(-1) * v
+        v_eff = (v - self.v0()).clamp_min(0.0)
+        m = e - scale * gates.unsqueeze(1).unsqueeze(-1) * v_eff
         e_masked = e.masked_fill(~d_valid.unsqueeze(2), torch.finfo(e.dtype).min)
         m_masked = m.masked_fill(~d_valid.unsqueeze(2), torch.finfo(m.dtype).min)
 

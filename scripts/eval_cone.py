@@ -52,7 +52,7 @@ def search(qE, qP, qG, dE, dP, dM, scale, k=100, chunk=1024, q_chunk=8):
                                dp.unsqueeze(0).expand(qe.shape[0], -1, -1, -1).flatten(0, 1),
                                document_mask=dm.unsqueeze(0).expand(qe.shape[0], -1, -1).flatten(0, 1)
                                ).view(qe.shape[0], de.shape[0], qe.shape[1], -1)
-            m = e - scale * qg.unsqueeze(1).unsqueeze(-1) * v
+            m = e - scale * qg.unsqueeze(1).unsqueeze(-1) * (v - model.v0().item()).clamp_min(0)
             neg = torch.finfo(torch.float32).min
             se_l.append(e.masked_fill(~dm[None, :, None, :], neg).max(-1).values.sum(-1))
             sf_l.append(m.masked_fill(~dm[None, :, None, :], neg).max(-1).values.sum(-1))
@@ -95,6 +95,8 @@ def main():
     model.gate.load_state_dict(state["gate"])
     with torch.no_grad():
         model.scale_raw.fill_(float(state["scale_raw"]))
+        if "v0_raw" in state:
+            model.v0_raw.fill_(float(state["v0_raw"]))
     scale = model.hyperbolic_scale().item()
     print("loaded phase2: scale=%.3f" % scale, flush=True)
 

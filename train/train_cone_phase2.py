@@ -33,6 +33,9 @@ def main():
     ap.add_argument("--scale-max", type=float, default=0.10)
     ap.add_argument("--min-cosine", type=float, default=0.45)
     ap.add_argument("--log-every", type=int, default=100)
+    ap.add_argument("--resume", default="")
+    ap.add_argument("--learn-scale", type=int, default=0)
+    ap.add_argument("--w-geo", type=float, default=1.0)
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -40,6 +43,15 @@ def main():
     model = ConeColBERT(colbert, hyperbolic_scale_max=args.scale_max).to(device)
     model.colbert.requires_grad_(False)
     model.colbert.eval()
+    if args.resume:
+        st = torch.load(args.resume, map_location="cpu", weights_only=False)
+        model.hyper_head.load_state_dict(st["hyper_head"])
+        model.gate.load_state_dict(st["gate"])
+        with torch.no_grad():
+            model.scale_raw.fill_(float(st["scale_raw"]))
+            if "v0_raw" in st:
+                model.v0_raw.fill_(float(st["v0_raw"]))
+        print("resumed from", args.resume, flush=True)
     trainable = [p for n, p in model.named_parameters()
                  if p.requires_grad and not n.startswith("colbert.")]
     opt = torch.optim.AdamW(trainable, lr=args.lr, weight_decay=0.01)
@@ -70,8 +82,11 @@ def main():
         t_scores = labels.gather(1, top)
 
         warm = max(0.0, min(1.0, (step - args.geo_steps) / max(args.warmup_steps, 1)))
-        with torch.no_grad():
-            model.scale_raw.fill_(warm * args.scale_max)
+        if not args.learn_scale:
+            with torch.no_grad():
+                model.scale_raw.fill_(warm * args.scale_max)
+        else:
+            warm = 1.0
 
         out = model(qf, df, n_docs=args.n_docs, train_aggregation="logsumexp",
                     lse_temperature=0.10)
@@ -89,7 +104,7 @@ def main():
                     + 0.01 * radius_variance_loss(out.query_radii, content)
                     + 0.01 * radius_variance_loss(
                         out.document_radii, d_valid.view(B, args.n_docs, -1)))
-        loss = geo_loss
+        loss = args.w_geo * geo_loss
         if warm > 0:
             # spec 6.6: teacher-residual warm-up on centered scores — only the
             # correction is trained, so the gate cannot be pushed to saturation
@@ -123,6 +138,7 @@ def main():
     torch.save({"hyper_head": model.hyper_head.state_dict(),
                 "gate": model.gate.state_dict(),
                 "scale_raw": model.scale_raw.detach().cpu(),
+                "v0_raw": model.v0_raw.detach().cpu(),
                 "config": vars(args)}, os.path.join(args.out_dir, "cone_phase2.pt"))
     print("saved", os.path.join(args.out_dir, "cone_phase2.pt"))
 
