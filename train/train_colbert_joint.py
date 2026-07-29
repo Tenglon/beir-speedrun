@@ -54,7 +54,7 @@ def main():
     opt = torch.optim.AdamW(params, weight_decay=0.01)
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: min(1.0, s / 500) * max(0.0, 1 - s / args.total_steps))
-    ddp = torch.nn.parallel.DistributedDataParallel(model) if world > 1 else model
+    ddp = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True) if world > 1 else model
 
     train = load_dataset(path=args.data_dir, name="train", split="train")
     queries = load_dataset(path=args.data_dir, name="queries", split="train")
